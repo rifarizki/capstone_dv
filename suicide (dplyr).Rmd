@@ -1,0 +1,549 @@
+---
+title: "Suicide Rates Overview 1995-2015"
+author: "Syarifah Rizki"
+date: "11/16/2021"
+output:
+  html_document:
+    code_folding: hide
+    df_print: paged 
+    highlight: tango
+    theme: cosmo
+    toc: yes
+    toc_float:
+      collapsed: no
+    number_sections: true
+  word_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Background
+
+
+# Import packages
+```{r}
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(scales)
+library(plotly)
+library(glue)
+library(extrafont)
+library(readr)
+```
+
+## Read data
+```{r}
+suicide <-  read_csv('Suicide Rates Overview 1985 to 2016.csv')
+head(suicide)
+```
+
+```{r}
+spec(suicide)
+```
+
+
+```{r}
+colnames(suicide)
+```
+```{r}
+suicide <- suicide %>% 
+  mutate_at(.vars = c("country","sex", "age", "generation"), .funs=as.factor) %>% 
+  mutate(`gdp_per_capita ($)` = as.numeric(`gdp_per_capita ($)`),
+         year = as.character(year),
+         year = as.Date(year, "%Y"),
+         year = year(year))
+```
+
+
+**Notes:** 
+There are six generations that exist between 1995-2015. 1) G.I. Generation/The Greatest Generation (born 1901-1924), 2) Silent (born 1925-1945),  3) Boomers (born 1946-1964), 4) Generation X (born 1965-1980) 5) Millenials/Generation Y (born 1981-1996), 6) Generation Z (born 1997-2012)
+
+# Data Wrangling
+
+```{r}
+# check dimensions
+
+dim(suicide)
+```
+We have 27820 observations and 12 columns.
+
+```{r}
+# check data types for all columns
+
+str(suicide)
+```
+```{r}
+# remove all commas from 'gdp_for_year....' column
+# use str_replace() function from stringr packages
+
+suicide$gdp_for_year.... <- str_replace_all(suicide$gdp_for_year...., ",",'')
+```
+
+
+```{r}
+# change to factor: country, age, sex, generation
+# change to datetime: year
+# change to integer: gdp.for.year
+
+ suicide <- suicide %>% 
+  rename(country = ï..country,
+         gdp.for.year = gdp_for_year....,
+         gdp.per.capita = gdp_per_capita....) %>%
+  mutate_at(.vars = c("country","sex", "age", "generation"), .funs=as.factor) %>% 
+  mutate(gdp.for.year = as.numeric(gdp.for.year),
+         year = as.character(year),
+         year = as.Date(year, "%Y"),
+         year = year(year))
+
+str(suicide)
+
+```
+Our column names are changed and so does their data types.
+
+```{r}
+head(suicide)
+```
+
+```{r}
+# check missing values
+
+colSums(is.na(suicide))
+```
+
+```{r}
+suicide <- subset(suicide, select = -c(HDI.for.year))
+suicide
+```
+
+```{r}
+# subsetting suicide cases from the last ten years
+decade <- suicide %>% 
+  filter(year >= 1995,
+         suicide$year <= 2015)
+
+decade
+```
+## Exploratory Data Analysis (EDA)
+
+**Research Question:**
+
+1. "Which country has the highest number of suicide cases in the last ten years?" (done)
+2. "Among the five countries that has the highest suicide rates in 2015, what are the percentage of male that committed suicide?"
+3. "Does male has a relatively higher number of suicide rate compared to female?" (done)
+3. "Most suicide cases in the top five countries came from which age group/generation?"
+4. "Show us the graphic of suicide rates in the US within the last ten years. Has it declining ever since or increasing?"
+
+**Find out about:**
+1. GDP for year
+2. GDP per capita
+
+```{r}
+# numbers of suicide cases in the last ten years based on sex
+sex <- decade %>% 
+  group_by(year, sex) %>% 
+  summarise(suicides_no = sum(suicides_no))
+
+sex
+```
+
+```{r}
+line = c("grey", "firebrick")
+
+sex_plot <- ggplot(sex, aes(
+  x = year,
+  y = suicides_no,
+  color= sex,
+  group = sex,
+  text = glue("Sex: {sex}
+              Year: {year}
+              Total of suicides: {comma(suicides_no)}"))) +
+  geom_line(size=1) + 
+  scale_color_manual(values = line) +
+  labs(x = NULL,
+       y = NULL,
+       title = 'Total of suicides based on sex') +
+  scale_y_continuous(label = comma_format()) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+sex_plot
+```
+```{r}
+# make interactive plot
+ggplotly(sex_plot, tooltip = "text")
+```
+```{r}
+ggplotly(sex_plot, tooltip = "text")
+```
+
+Regardless of which year we're looking at, the number of suicides committed by male remains about three times higher compared to female. The range number of female that died from suicides were around 40,000 - 58,000 while there were roughly 150,000 - 200,000 male that committed suicide each year.
+
+```{r}
+# numbers of suicide cases in the last ten years based on generations
+gen <- decade %>% 
+  group_by(generation) %>% 
+  summarise(sum(suicides_no)) %>%
+  rename('suicides_total' = 'sum(suicides_no)') %>% 
+  arrange(desc(suicides_total))
+
+gen
+```
+
+```{r}
+gen_plot <- gen %>%
+  ggplot(aes(x = suicides_total,
+             y = reorder(generation, suicides_total),
+             text = glue("{comma(suicides_total)}"))) +
+  geom_col(aes(fill = suicides_total)) +
+  scale_fill_gradient(low = 'darkgrey', high = 'firebrick') +
+  labs(x = NULL,
+       y = NULL,
+       title = 'Total of suicides based on generations',
+       subtitle = 'from 1995-2015') +
+  scale_x_continuous(label = comma_format()) +
+  theme_minimal()
+  #theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=0.8))
+  #theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+gen_plot
+```
+
+
+```{r}
+# make interactive plotting
+ggplotly(gen_plot, tooltip = "text")
+```
+
+
+```{r}
+# top 5 countries with the highest numbers of suicide cases in the last ten years (not based on the population)
+country_sn <- decade %>% 
+  group_by(country) %>% 
+  summarise(sum(suicides_no)) %>%
+  rename('suicides_total' = 'sum(suicides_no)') %>% 
+  arrange(desc(suicides_total)) %>% 
+  top_n(5)
+
+country_sn
+```
+
+```{r}
+country_sn_plot <- country_sn %>%
+  ggplot(aes(x = suicides_total,
+             y = reorder(country, suicides_total),
+             text = glue("Country:{country}
+                         Total suicides: {comma(suicides_total)}"))) +
+  geom_col(aes(fill=suicides_total)) +
+  labs(x = NULL,
+       y = NULL,
+       title = 'Countries with the highest number of suicides',
+       subtitle = 'from 1995-2015') +
+  scale_x_continuous(label = comma_format()) +
+  scale_fill_gradient(low = "grey", high = "firebrick") +
+  theme_minimal()
+
+country_sn_plot
+```
+
+```{r}
+# make interactive plot
+ggplotly(country_sn_plot, tooltip = "text")
+```
+
+
+Russia, US, Japan, South Korea and Ukraine are the top 5 countries that has the highest number of suicide cases within the last ten years. Now we want to see if those same countries also exist in the top 20 countries with the highest suicide rates, taking into consideration the ratio between suicides rates and its total of population.
+
+```{r}
+# aggregate countries name with their suicides rates and country's population
+country_rat <- decade %>% 
+  group_by(country) %>% 
+  summarise(total_suicides = sum(suicides_no),
+            pop = sum(population)) %>% 
+  mutate(ratio = (total_suicides / pop)*100) %>% 
+  arrange(desc(ratio)) %>% 
+  top_n(20)
+
+country_rat
+```
+
+```{r}
+country_rat_plot <- country_rat %>% 
+  ggplot(aes(x = ratio,
+             y = reorder(country, ratio),
+             text = glue("{country}
+                         Number of suicides: {comma(total_suicides)}
+                         Population: {comma(pop)}
+                         Ratio: {round(ratio, 4)}
+                         "))) +
+  geom_col(aes(fill = ratio)) +
+  scale_fill_gradient(low = 'darkgrey', high = 'firebrick') +
+  labs(x = NULL,
+       y = NULL,
+       title = 'Suicides ratio per population') +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+country_rat_plot
+```
+
+```{r}
+# make interactive plot
+ggplotly(country_rat_plot, tooltip = "text")
+```
+
+```{r}
+country_num_plot <- country_rat %>% 
+  ggplot(aes(x = total_suicides,
+             y = reorder(country, total_suicides),
+             text = glue("{country}
+                         Number of suicides: {comma(total_suicides)}
+                         Population: {comma(pop)}
+                         Ratio: {round(ratio, 4)}
+                         "))) +
+  geom_col(aes(fill = total_suicides)) +
+  scale_fill_gradient(low = 'darkgrey', high = 'firebrick') +
+  labs(x = NULL,
+       y = NULL,
+       title = 'Suicide number by countries') +
+  scale_x_continuous(label = comma_format()) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+country_num_plot
+```
+
+
+According to the barplot above, among the top five countries that has the highest number of suicide cases, four of them; Russia, South Korea, Japan, and Ukraine still ranked quite high when we included the ratio between suicides number and the country's population. They all exist in the top 20 countries with the most suicide cases/population. United States is the only country that didn't make to the top 20 countries. Next, we'll inspect more the data from those five countries.
+
+```{r}
+# subset data from the top 5 countries
+
+top_five <- decade %>%
+  filter(country %in% c('Russian Federation', 'Japan', 'Ukraine', 'United States', 'Republic of Korea'))
+
+top_five
+```
+
+```{r}
+levels(top_five$country)
+```
+
+Okay, so i just subset my data frame (decade) to a new dataframe (top_five) and it was supposed to consisted of five countries only. But turns out, all of the countries from our previous list are still exist. Now i'll removed the unused levels from our top_five using *droplevels()*.
+
+```{r}
+top_five$country <- droplevels(top_five$country)
+
+levels(top_five$country)
+```
+
+Good. Now there's only five levels of countries in our top_five dataframe. Next, let's find out the ratio between number of suicide cases found and the population for each countries from 1995-2015.
+
+```{r}
+top_five_trend <- top_five %>% 
+  group_by(country, year) %>% 
+  summarise(suicide_num = sum(suicides_no),
+            population = sum(population),
+            ratio = (suicide_num / population)*100)
+
+top_five_trend
+```
+
+**Insights:**
+
+From the line chart above we can see the trends of suicide rates in each of the five countries from 1995-2015.
+
+1. Although at first, Russia has the highest suicides rates compared to the other four countries, the trend has been declining gradually since 2001-2015.
+2. Unlike Russia, there has been a rise of suicides rates in the Republic of Korea or South Korea and it is slightly more fluctuate compared to Ukraine or even Japan.
+3. Suicides number in the other four countries witness a general decline or going on stagnant over the last ten years. While on the contrary, the number of suicides rates in South Korea (Republic of Korea) has increased.
+4. In South Korea the number of suicides rates per population in 2009 is three times higher than in 1995.
+5. Before 2008, Russia has the highest ratio of suicides/population but since 2008-2015 that place was replaced by South Korea.
+
+In general, the ratio of suicide rates per population are declining, except in South Korea.
+
+```{r}
+# highlight any country that has an increasing number of suicide rates within the last ten years
+
+cols <- c("gray", "firebrick", "black", "salmon", "grey")
+
+five_trend_plot <- top_five_trend %>% 
+  ggplot(aes(x = year,
+             y = ratio,
+             color = country,
+             group = country,
+             text = glue("Country: {country}
+                         Year: {year}
+                         Ratio: {round(ratio, 4)}"))) +
+  geom_line(aes(color = country), size = 1) +
+  scale_color_manual(values = cols) +
+  labs(title = "Suicide ratio trends in five countries",
+       x = NULL,
+       y = NULL)
+  theme_minimal() +
+  theme(legend.position = "none")
+
+five_trend_plot
+```
+
+```{r}
+# make interactive plotting
+ggplotly(five_trend_plot, tooltip = "text")
+```
+
+
+By highlighting a single line in our chart, it will be a lot easier for our audience to focused their attention on which country that is in contrast with the general trends. In this case, South Korea is the only country that has an increasing ratio of suicide rates while the other four countries have an improvement in pressing down the ratio of suicides rates.
+
+It's also interesting to know that South Korea begins as the country with the lowest ratio of suicide rates in 1995 but it ranked first as the country with the highest ratio of suicide cases per population in the span of ten years.
+
+
+```{r}
+
+gdp.100k <- decade %>% 
+  group_by(country, year) %>% 
+  summarise(suicide_num = sum(suicides_no),
+            population = sum(population),
+            gdp_per_capita = mean(gdp.per.capita),
+            ratio = (suicide_num / population)*100) %>% 
+  arrange(desc(ratio))
+
+gdp.100k
+```
+
+```{r}
+single_country <- decade %>% 
+  filter(country == "Lithuania") %>% 
+  group_by(year) %>% 
+  summarise(Total.suicides = sum(suicides_no),
+            Population = sum(population),
+            Ratio = (Total.suicides / Population)*100)
+
+single_country
+```
+```{r}
+single_plot <- single_country %>% 
+  ggplot(aes(x = year, y = Ratio)) +
+  geom_line(color = "salmon", size=1) +
+  geom_point(color = "black") +
+  theme_minimal() + 
+  labs(title = "Trends of suicide rates in Russia",
+       x = NULL,
+       y= NULL)
+
+single_plot
+```
+
+```{r}
+ggplotly(single_plot)
+```
+
+```{r}
+decade %>% 
+      filter(sex == "male") %>% 
+      group_by(year, sex) %>% 
+      summarise(suicides_no = sum(suicides_no))
+```
+
+```{r}
+age.group <- decade %>% 
+  filter(year == 2011,
+         country == "Lithuania") %>% 
+  group_by(year, sex, age) %>% 
+  summarise(total.suicides = sum(suicides_no),
+            Population = sum(population),
+            Ratio = (total.suicides / population)*100)
+
+age.group
+```
+
+```{r}
+# age.order <- c("5-14 years", "15-24 years", "25-34 years", "35-54 years", "55-74 years", "75+ years")
+
+age.plot <- age.group %>% 
+  arrange(Ratio) %>%
+  mutate(name = factor(age,
+                       levels = c("5-14 years", "15-24 years", "25-34 years",
+                                  "35-54 years", "55-74 years", "75+ years"))) %>%
+  ggplot(aes(x = name, y = Ratio, text = glue("Age group: {name},
+                                              Ratio: {round(Ratio, 4)}"))) +
+  geom_col(aes(fill = sex), position = "stack") +
+  scale_fill_manual(values = c("grey", "firebrick")) +
+  labs(x = NULL,
+       y = NULL,
+       title = "Lithuania suicide ratio in 2011",
+       subtitle = "Based on age group") +
+  theme_minimal()
+
+age.plot
+```
+```{r}
+ggplotly(age.plot, tooltip = "text")
+```
+
+```{r}
+age.group <- decade %>% 
+  filter(country == "Lithuania", year == 2011) %>% 
+  group_by(age, sex) %>% 
+  summarise(GDP.per.Capita = mean(gdp.per.capita),
+            total.suicides = sum(suicides_no),
+            Population = sum(population),
+            Ratio = (total.suicides / Population)*100)
+
+age.group
+```
+
+
+```{r}
+mapping <- read.csv("country code update.csv")
+
+decade2 <- decade %>% 
+  inner_join(mapping, decade, by = "country") %>% #inner_join(data1, data2, by = "ID")
+  select(country, year, suicides_no, population, Code)
+
+decade2
+```
+```{r}
+decade_new <- decade2 %>% 
+  group_by(country, year, Code) %>% 
+  summarise(total_suicides = sum(suicides_no),
+            total_population = sum(population),
+            ratio = (total_suicides / total_population)*100) %>% 
+  mutate(Ratio = round(ratio, 4))
+
+decade_new
+```
+
+```{r}
+unique(decade_new$country)
+```
+
+
+```{r}
+# create the world map
+
+mapping_graph <- plot_geo(decade_new,
+                          #locations = ~country,
+                          locationmode = 'country names',
+                          frame = ~year) %>%
+  add_trace(locations = ~country,
+            z = ~Ratio,
+            zmin = 0,
+            zmax = max(decade_new$ratio),
+            color = ~Ratio,
+            colorscale = 'Inferno') %>%
+  layout(geo = list(scope = "world"))
+
+mapping_graph
+```
+
+
+**Important resources:**
+
+* Tutorial for creating Interactive Choropleth & Scatter Maps with Plotly (like the one above): https://www.youtube.com/watch?v=RrtqBYLf404&t=182s
+* List of colorscale names (like Inferno or Twilight): https://plotly.com/python/builtin-colorscales/
+
+
+
